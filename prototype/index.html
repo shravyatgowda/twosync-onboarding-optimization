@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TwoSync: invite your partner</title>
+<style>
+  :root {
+    --bg: #ece8f6;
+    --surface: #fbfaff;
+    --ink: #25204a;
+    --muted: #615c85;
+    --rose: #d94a74;
+    --rose-dark: #b33a5e;
+    --teal: #1f7f74;
+    --line: #d4cee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17142f; --surface: #221e43; --ink: #f1eefc; --muted: #aaa4cc; --rose: #f06b92; --rose-dark: #d94a74; --teal: #5cc7b8; --line: #3a3566; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 16px/1.5 "Trebuchet MS", "Segoe UI", system-ui, sans-serif; display: flex; justify-content: center; }
+  main { width: 100%; max-width: 420px; padding: 28px 22px 40px; display: flex; flex-direction: column; gap: 22px; }
+  h1 { font: 700 30px/1.15 Georgia, "Times New Roman", serif; margin: 12px 0 0; }
+  p { margin: 0; color: var(--muted); }
+  .code { background: var(--surface); border: 1.5px dashed var(--line); border-radius: 14px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; }
+  .code b { font: 700 26px/1 "Courier New", monospace; letter-spacing: .14em; }
+  .code small { color: var(--muted); }
+  .channels { display: grid; gap: 10px; }
+  button { font: inherit; cursor: pointer; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); padding: 14px 16px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+  button:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+  button.primary { background: var(--rose); border-color: var(--rose); color: #fff; font-weight: 700; }
+  button.primary:hover { background: var(--rose-dark); }
+  .skip { background: none; border: none; color: var(--muted); text-decoration: underline; justify-content: center; padding: 6px; }
+  .status { border-radius: 14px; padding: 14px 16px; background: var(--surface); border: 1.5px solid var(--line); }
+  .status.ok { border-color: var(--teal); }
+  .status strong { display: block; }
+  details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  summary { cursor: pointer; font-weight: 700; }
+  pre { margin: 10px 0 0; max-height: 180px; overflow: auto; font: 12px/1.45 "Courier New", monospace; color: var(--muted); white-space: pre-wrap; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) { .status { transition: border-color .25s; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p id="step">Step 2 of 3</p>
+    <h1>Bring your person in</h1>
+    <p>TwoSync works when you are both here. Send one invite and we will pair you as soon as they join.</p>
+  </header>
+
+  <section class="code" aria-label="Your pairing code">
+    <div><small>Your pairing code</small><br><b id="code">KULF-7Q4M</b></div>
+    <button type="button" id="copy" class="skip" style="padding:8px">Copy</button>
+  </section>
+
+  <section id="channels" class="channels" aria-label="Send invite">
+    <button type="button" class="primary" data-channel="whatsapp">Send on WhatsApp <span>›</span></button>
+    <button type="button" data-channel="sms">Send by SMS <span>›</span></button>
+    <button type="button" data-channel="copy_link">Copy invite link <span>›</span></button>
+  </section>
+
+  <div id="status" class="status" role="status" hidden></div>
+  <button type="button" id="skip" class="skip">Do this later</button>
+
+  <details>
+    <summary>Event log (what PostHog would receive)</summary>
+    <pre id="log"></pre>
+  </details>
+</main>
+
+<script>
+(function () {
+  var variant = "treatment";
+  var session = "s_" + Math.random().toString(36).slice(2, 8);
+  var inviteId = null;
+  var sentAt = null;
+  var logEl = document.getElementById("log");
+  var statusEl = document.getElementById("status");
+
+  // Stand-in for posthog.capture(name, props). Swap this for the real SDK call.
+  function track(name, props) {
+    var payload = Object.assign({
+      platform: /iPhone|iPad/.test(navigator.userAgent) ? "ios" : "android",
+      experiment_variant: variant,
+      session_id: session,
+      local_hour: new Date().getHours()
+    }, props || {});
+    logEl.textContent += name + " " + JSON.stringify(payload) + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+    if (window.posthog && window.posthog.capture) window.posthog.capture(name, payload);
+  }
+
+  function setStatus(text, sub, ok) {
+    statusEl.hidden = false;
+    statusEl.className = "status" + (ok ? " ok" : "");
+    statusEl.innerHTML = "<strong></strong><span></span>";
+    statusEl.firstChild.textContent = text;
+    statusEl.lastChild.textContent = sub;
+  }
+
+  track("pairing_screen_viewed", { entry_point: "onboarding" });
+
+  document.getElementById("channels").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-channel]");
+    if (!btn) return;
+    var channel = btn.dataset.channel;
+    track("invite_channel_selected", { channel: channel });
+    inviteId = "inv_" + Math.random().toString(36).slice(2, 8);
+    sentAt = Date.now();
+    track("invite_sent", { channel: channel, invite_id: inviteId });
+    setStatus("Invite sent", "Waiting for your partner to open it.", false);
+
+    // Demo only: simulate the server-side events so the full funnel shows up in the log.
+    setTimeout(function () {
+      track("invite_opened", { invite_id: inviteId, time_since_sent_sec: Math.round((Date.now() - sentAt) / 1000) });
+      setStatus("Your partner opened the invite", "Waiting for them to finish signing up.", false);
+    }, 1800);
+    setTimeout(function () {
+      track("partner_registered", { invite_id: inviteId });
+    }, 3200);
+    setTimeout(function () {
+      track("pairing_completed", { invite_id: inviteId, time_since_sent_sec: Math.round((Date.now() - sentAt) / 1000) });
+      setStatus("You are paired", "Pick tonight's game together.", true);
+      document.getElementById("step").textContent = "Step 3 of 3";
+    }, 4600);
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var code = document.getElementById("code").textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(code).catch(function () {});
+    this.textContent = "Copied";
+  });
+
+  document.getElementById("skip").addEventListener("click", function () {
+    track("pairing_skipped", { step: "partner_invite" });
+    setStatus("No problem", "You can invite your partner from the home tab any time.", false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "note": "Proposed event schema for the partner-pairing invitation screen. Names are snake_case, past tense for completed actions.",
+  "common_properties": {
+    "platform": "android | ios",
+    "app_version": "string, semver",
+    "experiment_variant": "control | treatment",
+    "session_id": "string",
+    "local_hour": "int 0-23, user's local hour (needed for the 9 PM-midnight analysis)"
+  },
+  "events": [
+    {
+      "name": "pairing_screen_viewed",
+      "trigger": "Invitation screen is rendered and visible for at least 500 ms",
+      "properties": { "entry_point": "onboarding | home_banner | push" }
+    },
+    {
+      "name": "invite_channel_selected",
+      "trigger": "User taps a share option",
+      "properties": { "channel": "whatsapp | sms | copy_link | contacts" }
+    },
+    {
+      "name": "invite_sent",
+      "trigger": "OS share sheet returns success, or in-app send API returns 2xx",
+      "properties": { "channel": "whatsapp | sms | copy_link | contacts", "invite_id": "string" }
+    },
+    {
+      "name": "invite_send_failed",
+      "trigger": "Share sheet cancelled or send API returns non-2xx",
+      "properties": { "channel": "string", "reason": "cancelled | network | permission_denied | unknown" }
+    },
+    {
+      "name": "invite_opened",
+      "trigger": "Partner opens the invite link (server-side event)",
+      "properties": { "invite_id": "string", "time_since_sent_sec": "int" }
+    },
+    {
+      "name": "partner_registered",
+      "trigger": "Invited partner completes registration (server-side event)",
+      "properties": { "invite_id": "string" }
+    },
+    {
+      "name": "pairing_completed",
+      "trigger": "Both accounts are linked (server-side event)",
+      "properties": { "invite_id": "string", "time_since_sent_sec": "int" }
+    },
+    {
+      "name": "pairing_skipped",
+      "trigger": "User taps 'Do this later'",
+      "properties": { "step": "string" }
+    }
+  ],
+  "validation_rules": [
+    "invite_sent must be preceded by invite_channel_selected in the same session",
+    "pairing_completed.invite_id must match an earlier invite_sent.invite_id",
+    "Event counts per platform should be within 10% of each other for the same user volume",
+    "No duplicate (user_id, event, invite_id) rows within 5 seconds"
+  ]
+}
